@@ -1,0 +1,381 @@
+
+# =============================================
+# USERS & AUTHENTICATION
+# =============================================
+
+Table users {
+  id bigint [pk, increment]
+  uuid char(36) [unique]
+  name varchar
+  email varchar [unique]
+  email_verified_at timestamp
+  phone varchar
+  password varchar
+  avatar varchar
+  bio text
+  status enum
+  last_login_at timestamp
+  last_login_ip varchar
+  remember_token varchar
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+}
+
+Table roles {
+  id bigint [pk, increment]
+  name varchar
+  guard_name varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table permissions {
+  id bigint [pk, increment]
+  name varchar
+  guard_name varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table model_has_roles {
+  role_id bigint
+  model_id bigint
+  model_type varchar
+
+  Indexes {
+    (role_id, model_id, model_type) [pk]
+  }
+}
+
+Table model_has_permissions {
+  permission_id bigint
+  model_id bigint
+  model_type varchar
+
+  Indexes {
+    (permission_id, model_id, model_type) [pk]
+  }
+}
+
+Table role_has_permissions {
+  role_id bigint
+  permission_id bigint
+
+  Indexes {
+    (role_id, permission_id) [pk]
+  }
+}
+
+Ref: model_has_roles.role_id > roles.id
+Ref: model_has_permissions.permission_id > permissions.id
+Ref: role_has_permissions.role_id > roles.id
+Ref: role_has_permissions.permission_id > permissions.id
+
+# =============================================
+# USER PROFILES & PREFERENCES
+# =============================================
+
+Table user_profiles {
+  id bigint [pk, increment]
+  user_id bigint [unique]
+  date_of_birth date
+  gender enum
+  address text
+  city varchar
+  province varchar
+  country varchar
+  postal_code varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: user_profiles.user_id > users.id
+
+Table user_preferences {
+  id bigint [pk, increment]
+  user_id bigint [unique]
+  default_currency_id int
+  fiscal_year_start_month int [note: "1-12, default 1 = January"]
+  theme varchar [note: "light, dark, system"]
+  language varchar [note: "e.g. en, id"]
+  date_format varchar [note: "e.g. DD/MM/YYYY"]
+  number_format varchar [note: "e.g. 1.000,00 or 1,000.00"]
+  notification_email boolean
+  notification_push boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: user_preferences.user_id > users.id
+Ref: user_preferences.default_currency_id > currencies.id
+
+# =============================================
+# CURRENCIES
+# =============================================
+
+Table currencies {
+  id int [pk, increment]
+  code char(3) [unique, note: "ISO 4217, e.g. IDR, USD, EUR"]
+  name varchar
+  symbol varchar
+  format varchar [note: "e.g. #,##0.00"]
+  is_active boolean
+}
+
+# =============================================
+# ACCOUNTS
+# =============================================
+
+Table account_types {
+  id int [pk, increment]
+  name varchar [note: "Checking, Savings, Credit Card, E-Wallet, Cash, Investment"]
+  slug varchar [unique]
+  icon varchar
+  is_active boolean
+}
+
+Table accounts {
+  id bigint [pk, increment]
+  user_id bigint
+  account_type_id int
+  currency_id int
+  name varchar [note: "Friendly name, e.g. BCA Tabungan"]
+  institution_name varchar [note: "Bank or provider name"]
+  account_number varchar [note: "Last 4 digits or masked"]
+  balance decimal [note: "Current balance, updated on every transaction"]
+  credit_limit decimal [note: "Only for credit card"]
+  is_active boolean
+  is_default boolean
+  notes text
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+}
+
+Ref: accounts.user_id > users.id
+Ref: accounts.account_type_id > account_types.id
+Ref: accounts.currency_id > currencies.id
+
+# =============================================
+# TRANSACTION CATEGORIES
+# =============================================
+
+Table categories {
+  id bigint [pk, increment]
+  user_id bigint [note: "null = system default, user_id = custom"]
+  parent_id bigint
+  name varchar
+  slug varchar
+  type enum [note: "income, expense"]
+  icon varchar
+  color varchar
+  is_active boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: categories.user_id > users.id
+Ref: categories.parent_id > categories.id
+
+# =============================================
+# TRANSACTIONS
+# =============================================
+
+Table transactions {
+  id bigint [pk, increment]
+  user_id bigint
+  account_id bigint
+  category_id bigint
+  currency_id int
+  amount decimal
+  type enum [note: "income, expense, transfer"]
+  description varchar
+  notes text
+  transaction_date date
+  reference_number varchar
+  receipt_path varchar [note: "Path or URL to uploaded receipt"]
+  transfer_id bigint [note: "Links to transfers table if type = transfer"]
+  is_recurring boolean [note: "Flag if generated from recurring_transactions"]
+  recurring_transaction_id bigint
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp
+}
+
+Ref: transactions.user_id > users.id
+Ref: transactions.account_id > accounts.id
+Ref: transactions.category_id > categories.id
+Ref: transactions.currency_id > currencies.id
+Ref: transactions.transfer_id > transfers.id
+Ref: transactions.recurring_transaction_id > recurring_transactions.id
+
+# =============================================
+# TRANSFERS
+# =============================================
+
+Table transfers {
+  id bigint [pk, increment]
+  user_id bigint
+  from_account_id bigint
+  to_account_id bigint
+  amount decimal
+  from_currency_id int
+  to_currency_id int
+  exchange_rate decimal [note: "1.0 if same currency"]
+  fee decimal [note: "Transfer fee if any"]
+  notes text
+  transfer_date date
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: transfers.user_id > users.id
+Ref: transfers.from_account_id > accounts.id
+Ref: transfers.to_account_id > accounts.id
+Ref: transfers.from_currency_id > currencies.id
+Ref: transfers.to_currency_id > currencies.id
+
+# =============================================
+# BUDGETS
+# =============================================
+
+Table budgets {
+  id bigint [pk, increment]
+  user_id bigint
+  name varchar
+  currency_id int
+  total_amount decimal
+  period enum [note: "weekly, monthly, quarterly, yearly"]
+  start_date date
+  end_date date
+  is_active boolean
+  rollover_unused boolean [note: "Carry over unused budget to next period"]
+  notes text
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: budgets.user_id > users.id
+Ref: budgets.currency_id > currencies.id
+
+Table budget_categories {
+  id bigint [pk, increment]
+  budget_id bigint
+  category_id bigint
+  allocated_amount decimal
+  spent_amount decimal [note: "Updated dynamically or via cron"]
+
+  Indexes {
+    (budget_id, category_id) [unique]
+  }
+}
+
+Ref: budget_categories.budget_id > budgets.id
+Ref: budget_categories.category_id > categories.id
+
+# =============================================
+# SAVINGS GOALS
+# =============================================
+
+Table savings_goals {
+  id bigint [pk, increment]
+  user_id bigint
+  account_id bigint [note: "Target account to save into"]
+  currency_id int
+  name varchar
+  description text
+  target_amount decimal
+  current_amount decimal
+  monthly_target decimal [note: "Suggested or set monthly contribution"]
+  target_date date
+  status enum [note: "active, paused, completed, cancelled"]
+  icon varchar
+  color varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: savings_goals.user_id > users.id
+Ref: savings_goals.account_id > accounts.id
+Ref: savings_goals.currency_id > currencies.id
+
+Table savings_goal_contributions {
+  id bigint [pk, increment]
+  savings_goal_id bigint
+  transaction_id bigint [note: "Link to the transaction if from a real transaction"]
+  amount decimal
+  notes text
+  contributed_at timestamp
+}
+
+Ref: savings_goal_contributions.savings_goal_id > savings_goals.id
+Ref: savings_goal_contributions.transaction_id > transactions.id
+
+# =============================================
+# RECURRING TRANSACTIONS
+# =============================================
+
+Table recurring_transactions {
+  id bigint [pk, increment]
+  user_id bigint
+  account_id bigint
+  category_id bigint
+  currency_id int
+  amount decimal
+  type enum [note: "income, expense"]
+  description varchar
+  frequency enum [note: "daily, weekly, bi_weekly, monthly, quarterly, yearly"]
+  day_of_month int [note: "For monthly: 1-31"]
+  day_of_week int [note: "For weekly: 0=Sunday, 6=Saturday"]
+  start_date date
+  end_date date [note: "null = no end date"]
+  next_occurrence_date date
+  is_active boolean
+  notes text
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: recurring_transactions.user_id > users.id
+Ref: recurring_transactions.account_id > accounts.id
+Ref: recurring_transactions.category_id > categories.id
+Ref: recurring_transactions.currency_id > currencies.id
+
+# =============================================
+# NOTIFICATIONS & REMINDERS
+# =============================================
+
+Table notifications {
+  id bigint [pk, increment]
+  user_id bigint
+  type enum [note: "budget_limit, savings_goal, bill_reminder, recurring, system"]
+  title varchar
+  message text
+  related_model_type varchar [note: "e.g. budgets, savings_goals, recurring_transactions"]
+  related_model_id bigint
+  is_read boolean
+  read_at timestamp
+  created_at timestamp
+}
+
+Ref: notifications.user_id > users.id
+
+# =============================================
+# AUDIT LOGS
+# =============================================
+
+Table audit_logs {
+  id bigint [pk, increment]
+  user_id bigint
+  auditable_type varchar [note: "e.g. accounts, transactions, budgets"]
+  auditable_id bigint
+  event enum [note: "created, updated, deleted, restored"]
+  old_values json
+  new_values json
+  ip_address varchar
+  user_agent varchar
+  created_at timestamp
+}
+
+Ref: audit_logs.user_id > users.id
